@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Daily Quest & Time Allocation Dashboard</title>
+
+    <!-- PWA: 홈 화면 아이콘 및 독립 앱 모드 설정 -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#121214">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="시간표 테트리스">
+    <link rel="icon" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <style>
+        :root {
+            --bg-color: #121214;
+            --card-bg: #1e1e24;
+            --text: #e1e1e6;
+            --text-dim: #a8a8b3;
+            --border: #323238;
+            --sleep: #4b5563;
+            --commission: #3b82f6;
+            --patreon: #ec4899;
+            --house: #10b981;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 12px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .dashboard {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+
+        @media (min-width: 850px) {
+            body { padding: 20px; }
+            .dashboard { grid-template-columns: 320px 1fr; gap: 20px; }
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        h2 {
+            font-size: 1rem;
+            margin-top: 0;
+            margin-bottom: 12px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        textarea, input[type="text"] {
+            width: 100%;
+            background: #121214;
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 10px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.9rem;
+        }
+
+        textarea { resize: vertical; height: 75px; }
+
+        /* Todo List */
+        .todo-input { display: flex; gap: 8px; margin-bottom: 12px; }
+        .todo-input input { flex: 1; }
+        .todo-input button {
+            background: #8257e5; color: white; border: none;
+            padding: 0 16px; border-radius: 6px; cursor: pointer; font-weight: bold;
+        }
+        .todo-list { list-style: none; padding: 0; margin: 0; }
+        .todo-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 0; border-bottom: 1px solid var(--border);
+            cursor: pointer;
+        }
+        .todo-item.done span { text-decoration: line-through; color: var(--text-dim); }
+
+        /* Resource Management Gauge */
+        .gauge-group { display: flex; flex-direction: column; gap: 10px; }
+        .gauge-bar-container { background: #121214; border-radius: 6px; height: 12px; overflow: hidden; display: flex; }
+        .gauge-segment { height: 100%; transition: width 0.3s; }
+        .stat-row { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 2px; }
+
+        /* Mode Selector for Mobile */
+        .mode-container {
+            display: flex;
+            background: #121214;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 12px;
+            gap: 4px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 8px 4px;
+            border: none;
+            background: transparent;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .mode-btn.active {
+            background: #8257e5;
+            color: #fff;
+        }
+
+        /* Tetris Palette & Grid */
+        .palette { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .color-btn {
+            border: 2px solid transparent; padding: 6px 10px; border-radius: 20px;
+            color: white; font-size: 0.8rem; font-weight: bold; cursor: pointer; flex: 1 1 auto;
+            text-align: center;
+        }
+        .color-btn.active { border-color: #fff; transform: scale(1.02); }
+
+        .time-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        @media (min-width: 480px) {
+            .time-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        @media (min-width: 768px) {
+            .time-grid { grid-template-columns: repeat(4, 1fr); }
+        }
+
+        .time-block {
+            background: #121214;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 10px;
+            min-height: 52px;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .time-block:active { transform: scale(0.98); }
+        .time-label { font-size: 0.75rem; color: var(--text-dim); font-weight: bold; }
+        .time-text { font-size: 0.78rem; margin-top: 4px; word-break: break-all; font-weight: 500; }
+
+        /* Category Colors */
+        .cat-none { background: #121214; }
+        .cat-sleep { background: var(--sleep) !important; }
+        .cat-commission { background: var(--commission) !important; }
+        .cat-patreon { background: var(--patreon) !important; }
+        .cat-house { background: var(--house) !important; }
+    </style>
+</head>
+<body>
+
+<div class="dashboard">
+    <!-- Left Panel: Goals & Todo -->
+    <div class="left-panel">
+        <div class="card">
+            <h2>🎯 이번 달 목표 (Monthly Goals)</h2>
+            <textarea id="monthlyGoals" placeholder="• 패트리온: 리워드 1회 완성&#10;• 커미션: 슬롯 마감"></textarea>
+        </div>
+
+        <div class="card">
+            <h2>✅ 오늘의 할 일 (Today's Quests)</h2>
+            <div class="todo-input">
+                <input type="text" id="todoInput" placeholder="할 일 입력..." onkeydown="if(event.key==='Enter') addTodo()">
+                <button onclick="addTodo()">추가</button>
+            </div>
+            <ul class="todo-list" id="todoList"></ul>
+        </div>
+
+        <div class="card">
+            <h2>📊 오늘 자산(시간) 투자율</h2>
+            <div class="gauge-bar-container" id="totalGauge"></div>
+            <div class="gauge-group" style="margin-top: 12px;" id="statLabels"></div>
+        </div>
+    </div>
+
+    <!-- Right Panel: Tetris Timeline Grid -->
+    <div class="right-panel">
+        <div class="card">
+            <h2>🧩 24시간 시간표 테트리스</h2>
+            
+            <!-- Mobile Touch Action Mode Selector -->
+            <div class="mode-container">
+                <button class="mode-btn active" id="modeFill" onclick="setTouchMode('fill')">🎨 색상 배치</button>
+                <button class="mode-btn" id="modeMemo" onclick="setTouchMode('memo')">📝 메모 입력</button>
+                <button class="mode-btn" id="modeClear" onclick="setTouchMode('clear')">🧹 블록 지우기</button>
+            </div>
+
+            <!-- Color Palette -->
+            <div class="palette" id="paletteBox">
+                <button class="color-btn active" style="background: var(--commission);" onclick="selectCategory('commission', this)">🎨 커미션</button>
+                <button class="color-btn" style="background: var(--patreon);" onclick="selectCategory('patreon', this)">🔥 NSFW</button>
+                <button class="color-btn" style="background: var(--house);" onclick="selectCategory('house', this)">🐕 산책/집안일</button>
+                <button class="color-btn" style="background: var(--sleep);" onclick="selectCategory('sleep', this)">💤 수면/휴식</button>
+            </div>
+
+            <div class="time-grid" id="timeGrid"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentCategory = 'commission';
+    let touchMode = 'fill'; // 'fill', 'memo', 'clear'
+
+    const catColors = {
+        none: '#121214',
+        sleep: '#4b5563',
+        commission: '#3b82f6',
+        patreon: '#ec4899',
+        house: '#10b981'
+    };
+    const catNames = {
+        none: '미설정',
+        sleep: '수면/휴식',
+        commission: '커미션',
+        patreon: 'NSFW/패트리온',
+        house: '산책/집안일'
+    };
+
+    let timeBlocksData = JSON.parse(localStorage.getItem('timeBlocks')) || Array(24).fill().map(() => ({ cat: 'none', text: '' }));
+    let todos = JSON.parse(localStorage.getItem('todos')) || [];
+    document.getElementById('monthlyGoals').value = localStorage.getItem('monthlyGoals') || '';
+
+    document.getElementById('monthlyGoals').addEventListener('input', (e) => {
+        localStorage.setItem('monthlyGoals', e.target.value);
+    });
+
+    function setTouchMode(mode) {
+        touchMode = mode;
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        if(mode === 'fill') document.getElementById('modeFill').classList.add('active');
+        if(mode === 'memo') document.getElementById('modeMemo').classList.add('active');
+        if(mode === 'clear') document.getElementById('modeClear').classList.add('active');
+
+        document.getElementById('paletteBox').style.opacity = (mode === 'fill') ? '1' : '0.4';
+    }
+
+    function selectCategory(cat, btn) {
+        currentCategory = cat;
+        document.querySelectorAll('.palette .color-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        setTouchMode('fill');
+    }
+
+    function renderGrid() {
+        const grid = document.getElementById('timeGrid');
+        grid.innerHTML = '';
+        timeBlocksData.forEach((block, index) => {
+            const blockEl = document.createElement('div');
+            blockEl.className = `time-block cat-${block.cat}`;
+            
+            blockEl.onclick = () => handleBlockClick(index);
+
+            const timeLabel = `${String(index).padStart(2, '0')}:00`;
+            blockEl.innerHTML = `
+                <div class="time-label">${timeLabel}</div>
+                <div class="time-text">${block.text || (block.cat !== 'none' ? catNames[block.cat] : '')}</div>
+            `;
+            grid.appendChild(blockEl);
+        });
+        updateStats();
+    }
+
+    function handleBlockClick(index) {
+        if (touchMode === 'fill') {
+            timeBlocksData[index].cat = currentCategory;
+        } else if (touchMode === 'memo') {
+            const currentText = timeBlocksData[index].text;
+            const newText = prompt(`${index}:00 시 세부 메모 입력:`, currentText);
+            if (newText !== null) {
+                timeBlocksData[index].text = newText;
+            }
+        } else if (touchMode === 'clear') {
+            timeBlocksData[index] = { cat: 'none', text: '' };
+        }
+        saveAndRender();
+    }
+
+    function saveAndRender() {
+        localStorage.setItem('timeBlocks', JSON.stringify(timeBlocksData));
+        renderGrid();
+    }
+
+    function updateStats() {
+        const counts = { sleep: 0, commission: 0, patreon: 0, house: 0, none: 0 };
+        timeBlocksData.forEach(b => counts[b.cat]++);
+
+        const totalGauge = document.getElementById('totalGauge');
+        const statLabels = document.getElementById('statLabels');
+        
+        totalGauge.innerHTML = '';
+        statLabels.innerHTML = '';
+
+        Object.keys(catColors).forEach(cat => {
+            if(cat === 'none') return;
+            const percent = ((counts[cat] / 24) * 100).toFixed(1);
+            
+            if(counts[cat] > 0) {
+                const seg = document.createElement('div');
+                seg.className = 'gauge-segment';
+                seg.style.width = `${percent}%`;
+                seg.style.backgroundColor = catColors[cat];
+                totalGauge.appendChild(seg);
+            }
+
+            const row = document.createElement('div');
+            row.innerHTML = `
+                <div class="stat-row">
+                    <span>${catNames[cat]}</span>
+                    <span><strong>${counts[cat]}시간</strong> (${percent}%)</span>
+                </div>
+            `;
+            statLabels.appendChild(row);
+        });
+    }
+
+    // Todo Logic
+    function addTodo() {
+        const input = document.getElementById('todoInput');
+        if(!input.value.trim()) return;
+        todos.push({ text: input.value.trim(), done: false });
+        input.value = '';
+        saveTodos();
+    }
+
+    function toggleTodo(index) {
+        todos[index].done = !todos[index].done;
+        saveTodos();
+    }
+
+    function deleteTodo(index, e) {
+        e.stopPropagation();
+        todos.splice(index, 1);
+        saveTodos();
+    }
+
+    function saveTodos() {
+        localStorage.setItem('todos', JSON.stringify(todos));
+        renderTodos();
+    }
+
+    function renderTodos() {
+        const list = document.getElementById('todoList');
+        list.innerHTML = '';
+        todos.forEach((todo, i) => {
+            const li = document.createElement('li');
+            li.className = `todo-item ${todo.done ? 'done' : ''}`;
+            li.onclick = () => toggleTodo(i);
+            li.innerHTML = `
+                <input type="checkbox" ${todo.done ? 'checked' : ''}>
+                <span style="flex:1">${todo.text}</span>
+                <button onclick="deleteTodo(${i}, event)" style="background:none; border:none; color:#ef4444; cursor:pointer;">✕</button>
+            `;
+            list.appendChild(li);
+        });
+    }
+
+    renderGrid();
+    renderTodos();
+
+    // PWA 설치 및 오프라인 지원을 위한 서비스워커 등록
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        });
+    }
+</script>
+</body>
+</html>
