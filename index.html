@@ -187,6 +187,11 @@
 <div class="dashboard">
     <!-- Left Panel: Goals & Todo -->
     <div class="left-panel">
+        <div class="card" id="syncCard">
+            <h2>☁️ 기기 간 동기화</h2>
+            <div id="syncStatusText" style="font-size: 0.85rem; color: var(--text-dim);">동기화 상태 확인 중...</div>
+        </div>
+
         <div class="card">
             <h2>🎯 이번 달 목표 (Monthly Goals)</h2>
             <textarea id="monthlyGoals" placeholder="• 패트리온: 리워드 1회 완성&#10;• 커미션: 슬롯 마감"></textarea>
@@ -233,7 +238,99 @@
     </div>
 </div>
 
+<!-- ☁️ 기기 간 동기화를 위한 Firebase SDK (무료) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
 <script>
+    // ⚠️ 아래 값을 본인의 Firebase 프로젝트 설정값으로 바꿔주세요.
+    // (Firebase 콘솔 > 프로젝트 설정 > 내 앱 에서 복사한 firebaseConfig 객체를 그대로 붙여넣으면 됩니다.)
+    const firebaseConfig = {
+        apiKey: "AIzaSyDFW-nE5fhOacozSb05ASBS0-4noTn5kbE",
+        authDomain: "test02-01-bf691.firebaseapp.com",
+        projectId: "test02-01-bf691",
+        storageBucket: "test02-01-bf691.firebasestorage.app",
+        messagingSenderId: "333519514574",
+        appId: "1:333519514574:web:0b45872dd2926d75ec999f"
+    };
+
+    let db = null;
+    let isFirebaseReady = false;
+    let applyingRemote = false;
+    let goalsFieldFocused = false;
+
+    function isConfigFilled(cfg) {
+        return cfg.apiKey && !cfg.apiKey.includes('여기에');
+    }
+
+    function getDocRef() {
+        return db.collection('schedule_app').doc('main');
+    }
+
+    function initSync() {
+        const statusEl = document.getElementById('syncStatusText');
+        if (!isConfigFilled(firebaseConfig)) {
+            statusEl.textContent = '🔌 동기화 미설정 (이 기기에만 저장됨)';
+            return;
+        }
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            isFirebaseReady = true;
+            statusEl.textContent = '🔄 연결 중...';
+            listenForRemoteChanges();
+        } catch (e) {
+            console.error(e);
+            statusEl.textContent = '⚠️ 동기화 연결 실패 (이 기기에만 저장됨)';
+        }
+    }
+
+    function listenForRemoteChanges() {
+        const statusEl = document.getElementById('syncStatusText');
+        getDocRef().onSnapshot((doc) => {
+            if (doc.exists) {
+                const data = doc.data();
+                applyingRemote = true;
+                if (Array.isArray(data.timeBlocksData)) {
+                    timeBlocksData = data.timeBlocksData;
+                    localStorage.setItem('timeBlocks', JSON.stringify(timeBlocksData));
+                    renderGrid();
+                }
+                if (Array.isArray(data.todos)) {
+                    todos = data.todos;
+                    localStorage.setItem('todos', JSON.stringify(todos));
+                    renderTodos();
+                }
+                if (typeof data.monthlyGoals === 'string' && !goalsFieldFocused) {
+                    document.getElementById('monthlyGoals').value = data.monthlyGoals;
+                    localStorage.setItem('monthlyGoals', data.monthlyGoals);
+                }
+                applyingRemote = false;
+                const t = data.updatedAt ? new Date(data.updatedAt) : null;
+                statusEl.textContent = t ? `✅ 동기화됨 (마지막: ${t.toLocaleTimeString('ko-KR')})` : '✅ 동기화됨';
+            } else {
+                pushToCloud(); // 클라우드에 문서가 없으면 현재 기기 데이터로 새로 생성
+            }
+        }, (err) => {
+            console.error(err);
+            statusEl.textContent = '⚠️ 동기화 오류 (이 기기에만 저장됨)';
+        });
+    }
+
+    let pushTimer = null;
+    function pushToCloud() {
+        if (!isFirebaseReady || applyingRemote) return;
+        clearTimeout(pushTimer);
+        pushTimer = setTimeout(() => {
+            getDocRef().set({
+                timeBlocksData,
+                todos,
+                monthlyGoals: document.getElementById('monthlyGoals').value,
+                updatedAt: Date.now()
+            }, { merge: true }).catch(e => console.error(e));
+        }, 400);
+    }
+
     let currentCategory = 'commission';
     let touchMode = 'fill'; // 'fill', 'memo', 'clear'
 
@@ -258,7 +355,10 @@
 
     document.getElementById('monthlyGoals').addEventListener('input', (e) => {
         localStorage.setItem('monthlyGoals', e.target.value);
+        pushToCloud();
     });
+    document.getElementById('monthlyGoals').addEventListener('focus', () => { goalsFieldFocused = true; });
+    document.getElementById('monthlyGoals').addEventListener('blur', () => { goalsFieldFocused = false; });
 
     function setTouchMode(mode) {
         touchMode = mode;
@@ -314,6 +414,7 @@
     function saveAndRender() {
         localStorage.setItem('timeBlocks', JSON.stringify(timeBlocksData));
         renderGrid();
+        pushToCloud();
     }
 
     function updateStats() {
@@ -372,6 +473,7 @@
     function saveTodos() {
         localStorage.setItem('todos', JSON.stringify(todos));
         renderTodos();
+        pushToCloud();
     }
 
     function renderTodos() {
@@ -392,6 +494,7 @@
 
     renderGrid();
     renderTodos();
+    initSync();
 
     // PWA 설치 및 오프라인 지원을 위한 서비스워커 등록
     if ('serviceWorker' in navigator) {
