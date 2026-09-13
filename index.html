@@ -180,6 +180,19 @@
         .cat-commission { background: var(--commission) !important; }
         .cat-patreon { background: var(--patreon) !important; }
         .cat-house { background: var(--house) !important; }
+
+        .palette-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin: 4px 0 6px;
+            font-weight: bold;
+        }
+        .color-btn.none-btn {
+            background: #121214 !important;
+            border: 2px dashed var(--border);
+            color: var(--text-dim);
+        }
+        .color-btn.none-btn.active { border-color: #fff; }
     </style>
 </head>
 <body>
@@ -190,6 +203,11 @@
         <div class="card" id="syncCard">
             <h2>☁️ 기기 간 동기화</h2>
             <div id="syncStatusText" style="font-size: 0.85rem; color: var(--text-dim);">동기화 상태 확인 중...</div>
+        </div>
+
+        <div class="card">
+            <h2>🧭 대전제 메모 (계절/원칙 등)</h2>
+            <textarea id="corePrinciples" placeholder="예) 겨울엔 오전 산책 대신 오후로 이동&#10;예) 마감 3일 전엔 NSFW 작업 우선순위 최상단"></textarea>
         </div>
 
         <div class="card">
@@ -226,11 +244,21 @@
             </div>
 
             <!-- Color Palette -->
+            <div class="palette-label">🎨 메인 색상</div>
             <div class="palette" id="paletteBox">
                 <button class="color-btn active" style="background: var(--commission);" onclick="selectCategory('commission', this)">🎨 커미션</button>
                 <button class="color-btn" style="background: var(--patreon);" onclick="selectCategory('patreon', this)">🔥 NSFW</button>
                 <button class="color-btn" style="background: var(--house);" onclick="selectCategory('house', this)">🐕 산책/집안일</button>
                 <button class="color-btn" style="background: var(--sleep);" onclick="selectCategory('sleep', this)">💤 수면/휴식</button>
+            </div>
+
+            <div class="palette-label">◐ 보조 색상 (계절 전환 등, 칸을 대각선으로 나눠 칠함)</div>
+            <div class="palette" id="paletteBox2">
+                <button class="color-btn none-btn active" onclick="selectCategory2('none', this)">사용 안 함</button>
+                <button class="color-btn" style="background: var(--commission);" onclick="selectCategory2('commission', this)">🎨 커미션</button>
+                <button class="color-btn" style="background: var(--patreon);" onclick="selectCategory2('patreon', this)">🔥 NSFW</button>
+                <button class="color-btn" style="background: var(--house);" onclick="selectCategory2('house', this)">🐕 산책/집안일</button>
+                <button class="color-btn" style="background: var(--sleep);" onclick="selectCategory2('sleep', this)">💤 수면/휴식</button>
             </div>
 
             <div class="time-grid" id="timeGrid"></div>
@@ -258,6 +286,7 @@
     let isFirebaseReady = false;
     let applyingRemote = false;
     let goalsFieldFocused = false;
+    let principlesFieldFocused = false;
 
     function isConfigFilled(cfg) {
         return cfg.apiKey && !cfg.apiKey.includes('여기에');
@@ -305,6 +334,10 @@
                     document.getElementById('monthlyGoals').value = data.monthlyGoals;
                     localStorage.setItem('monthlyGoals', data.monthlyGoals);
                 }
+                if (typeof data.corePrinciples === 'string' && !principlesFieldFocused) {
+                    document.getElementById('corePrinciples').value = data.corePrinciples;
+                    localStorage.setItem('corePrinciples', data.corePrinciples);
+                }
                 applyingRemote = false;
                 const t = data.updatedAt ? new Date(data.updatedAt) : null;
                 statusEl.textContent = t ? `✅ 동기화됨 (마지막: ${t.toLocaleTimeString('ko-KR')})` : '✅ 동기화됨';
@@ -326,12 +359,14 @@
                 timeBlocksData,
                 todos,
                 monthlyGoals: document.getElementById('monthlyGoals').value,
+                corePrinciples: document.getElementById('corePrinciples').value,
                 updatedAt: Date.now()
             }, { merge: true }).catch(e => console.error(e));
         }, 400);
     }
 
     let currentCategory = 'commission';
+    let currentCategory2 = 'none';
     let touchMode = 'fill'; // 'fill', 'memo', 'clear'
 
     const catColors = {
@@ -349,9 +384,12 @@
         house: '산책/집안일'
     };
 
-    let timeBlocksData = JSON.parse(localStorage.getItem('timeBlocks')) || Array(24).fill().map(() => ({ cat: 'none', text: '' }));
+    let timeBlocksData = JSON.parse(localStorage.getItem('timeBlocks')) || Array(24).fill().map(() => ({ cat: 'none', cat2: 'none', text: '' }));
+    // 예전 데이터(단일 색상)를 위해 cat2 필드가 없으면 채워줌
+    timeBlocksData = timeBlocksData.map(b => ({ cat2: 'none', ...b }));
     let todos = JSON.parse(localStorage.getItem('todos')) || [];
     document.getElementById('monthlyGoals').value = localStorage.getItem('monthlyGoals') || '';
+    document.getElementById('corePrinciples').value = localStorage.getItem('corePrinciples') || '';
 
     document.getElementById('monthlyGoals').addEventListener('input', (e) => {
         localStorage.setItem('monthlyGoals', e.target.value);
@@ -359,6 +397,13 @@
     });
     document.getElementById('monthlyGoals').addEventListener('focus', () => { goalsFieldFocused = true; });
     document.getElementById('monthlyGoals').addEventListener('blur', () => { goalsFieldFocused = false; });
+
+    document.getElementById('corePrinciples').addEventListener('input', (e) => {
+        localStorage.setItem('corePrinciples', e.target.value);
+        pushToCloud();
+    });
+    document.getElementById('corePrinciples').addEventListener('focus', () => { principlesFieldFocused = true; });
+    document.getElementById('corePrinciples').addEventListener('blur', () => { principlesFieldFocused = false; });
 
     function setTouchMode(mode) {
         touchMode = mode;
@@ -368,11 +413,19 @@
         if(mode === 'clear') document.getElementById('modeClear').classList.add('active');
 
         document.getElementById('paletteBox').style.opacity = (mode === 'fill') ? '1' : '0.4';
+        document.getElementById('paletteBox2').style.opacity = (mode === 'fill') ? '1' : '0.4';
     }
 
     function selectCategory(cat, btn) {
         currentCategory = cat;
-        document.querySelectorAll('.palette .color-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#paletteBox .color-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        setTouchMode('fill');
+    }
+
+    function selectCategory2(cat, btn) {
+        currentCategory2 = cat;
+        document.querySelectorAll('#paletteBox2 .color-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         setTouchMode('fill');
     }
@@ -382,14 +435,31 @@
         grid.innerHTML = '';
         timeBlocksData.forEach((block, index) => {
             const blockEl = document.createElement('div');
-            blockEl.className = `time-block cat-${block.cat}`;
-            
+            blockEl.className = 'time-block';
+
+            const cat2 = block.cat2 && block.cat2 !== 'none' ? block.cat2 : null;
+            if (cat2 && cat2 !== block.cat) {
+                blockEl.style.background = `linear-gradient(135deg, ${catColors[block.cat]} 50%, ${catColors[cat2]} 50%)`;
+            } else {
+                blockEl.style.background = catColors[block.cat];
+            }
+
             blockEl.onclick = () => handleBlockClick(index);
 
             const timeLabel = `${String(index).padStart(2, '0')}:00`;
+            let labelText = block.text;
+            if (!labelText) {
+                if (cat2 && cat2 !== block.cat) {
+                    labelText = `${catNames[block.cat]} / ${catNames[cat2]}`;
+                } else if (block.cat !== 'none') {
+                    labelText = catNames[block.cat];
+                } else {
+                    labelText = '';
+                }
+            }
             blockEl.innerHTML = `
                 <div class="time-label">${timeLabel}</div>
-                <div class="time-text">${block.text || (block.cat !== 'none' ? catNames[block.cat] : '')}</div>
+                <div class="time-text">${labelText}</div>
             `;
             grid.appendChild(blockEl);
         });
@@ -399,6 +469,7 @@
     function handleBlockClick(index) {
         if (touchMode === 'fill') {
             timeBlocksData[index].cat = currentCategory;
+            timeBlocksData[index].cat2 = currentCategory2;
         } else if (touchMode === 'memo') {
             const currentText = timeBlocksData[index].text;
             const newText = prompt(`${index}:00 시 세부 메모 입력:`, currentText);
@@ -406,7 +477,7 @@
                 timeBlocksData[index].text = newText;
             }
         } else if (touchMode === 'clear') {
-            timeBlocksData[index] = { cat: 'none', text: '' };
+            timeBlocksData[index] = { cat: 'none', cat2: 'none', text: '' };
         }
         saveAndRender();
     }
@@ -419,7 +490,15 @@
 
     function updateStats() {
         const counts = { sleep: 0, commission: 0, patreon: 0, house: 0, none: 0 };
-        timeBlocksData.forEach(b => counts[b.cat]++);
+        timeBlocksData.forEach(b => {
+            const hasSecond = b.cat2 && b.cat2 !== 'none' && b.cat2 !== b.cat;
+            if (hasSecond) {
+                counts[b.cat] += 0.5;
+                counts[b.cat2] += 0.5;
+            } else {
+                counts[b.cat] += 1;
+            }
+        });
 
         const totalGauge = document.getElementById('totalGauge');
         const statLabels = document.getElementById('statLabels');
@@ -430,6 +509,7 @@
         Object.keys(catColors).forEach(cat => {
             if(cat === 'none') return;
             const percent = ((counts[cat] / 24) * 100).toFixed(1);
+            const hoursText = counts[cat] % 1 === 0 ? counts[cat].toString() : counts[cat].toFixed(1);
             
             if(counts[cat] > 0) {
                 const seg = document.createElement('div');
@@ -443,7 +523,7 @@
             row.innerHTML = `
                 <div class="stat-row">
                     <span>${catNames[cat]}</span>
-                    <span><strong>${counts[cat]}시간</strong> (${percent}%)</span>
+                    <span><strong>${hoursText}시간</strong> (${percent}%)</span>
                 </div>
             `;
             statLabels.appendChild(row);
