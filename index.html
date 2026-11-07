@@ -84,6 +84,14 @@
 
         textarea { resize: vertical; height: 75px; }
 
+        /* 이번 달 목표: 길고 읽기 쉽게 */
+        #monthlyGoals {
+            height: 260px;
+            font-size: 1.05rem;
+            line-height: 1.7;
+            padding: 14px;
+        }
+
         /* Todo List */
         .todo-input { display: flex; gap: 8px; margin-bottom: 12px; }
         .todo-input input { flex: 1; }
@@ -223,12 +231,6 @@
             </div>
             <ul class="todo-list" id="todoList"></ul>
         </div>
-
-        <div class="card">
-            <h2>📊 오늘 자산(시간) 투자율</h2>
-            <div class="gauge-bar-container" id="totalGauge"></div>
-            <div class="gauge-group" style="margin-top: 12px;" id="statLabels"></div>
-        </div>
     </div>
 
     <!-- Right Panel: Tetris Timeline Grid -->
@@ -262,6 +264,12 @@
             </div>
 
             <div class="time-grid" id="timeGrid"></div>
+        </div>
+
+        <div class="card">
+            <h2>📊 오늘 자산(시간) 투자율</h2>
+            <div class="gauge-bar-container" id="totalGauge"></div>
+            <div class="gauge-group" style="margin-top: 12px;" id="statLabels"></div>
         </div>
     </div>
 </div>
